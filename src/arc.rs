@@ -66,7 +66,7 @@ impl<T: ?Sized> ArcInner<T> {
 /// [`Arc`]: https://doc.rust-lang.org/stable/std/sync/struct.Arc.html
 #[repr(transparent)]
 pub struct Arc<T: ?Sized> {
-    pub(crate) p: ptr::NonNull<ArcInner<T>>,
+    pub(crate) p: NonNull<ArcInner<T>>,
     pub(crate) phantom: PhantomData<T>,
 }
 
@@ -84,7 +84,7 @@ impl<T> Arc<T> {
 
         unsafe {
             Arc {
-                p: ptr::NonNull::new_unchecked(ptr),
+                p: NonNull::new_unchecked(ptr),
                 phantom: PhantomData,
             }
         }
@@ -111,7 +111,7 @@ impl<T> Arc<T> {
     pub fn into_raw_offset(a: Self) -> OffsetArc<T> {
         unsafe {
             OffsetArc {
-                ptr: ptr::NonNull::new_unchecked(Arc::into_raw(a) as *mut T),
+                ptr: NonNull::new_unchecked(Arc::into_raw(a) as *mut T),
                 phantom: PhantomData,
             }
         }
@@ -153,7 +153,8 @@ impl<T> Arc<[T]> {
     ///
     /// [`Arc::from_raw`] should accept unsized types, but this is not trivial to do correctly
     /// until the feature [`pointer_bytes_offsets`](https://github.com/rust-lang/rust/issues/96283)
-    /// is stabilized. This is stopgap solution for slices.
+    /// is stabilized.
+    /// This is a stopgap solution for slices.
     ///
     ///  # Safety
     /// - The given pointer must be a valid pointer to `[T]` that came from [`Arc::into_raw`].
@@ -286,7 +287,7 @@ impl<T: ?Sized> Arc<T> {
     }
 
     /// Allocates an `ArcInner<T>` with sufficient space for
-    /// a possibly-unsized inner value where the value has the layout provided.
+    /// a possibly unsized inner value where the value has the layout provided.
     ///
     /// The function `mem_to_arcinner` is called with the data pointer
     /// and must return back a (potentially fat)-pointer for the `ArcInner<T>`.
@@ -317,7 +318,7 @@ impl<T: ?Sized> Arc<T> {
     }
 
     /// Allocates an `ArcInner<T>` with sufficient space for
-    /// a possibly-unsized inner value where the value has the layout provided,
+    /// a possibly unsized inner value where the value has the layout provided,
     /// returning an error if allocation fails.
     ///
     /// The function `mem_to_arcinner` is called with the data pointer
@@ -375,7 +376,7 @@ impl<H, T> Arc<HeaderSlice<H, [T]>> {
                 // Synthesize the fat pointer. We do this by claiming we have a direct
                 // pointer to a [T], and then changing the type of the borrow. The key
                 // point here is that the length portion of the fat pointer applies
-                // only to the number of elements in the dynamically-sized portion of
+                // only to the number of elements in the dynamically sized portion of
                 // the type, so the value will be the same whether it points to a [T]
                 // or something else with a [T] as its last member.
                 let fake_slice = ptr::slice_from_raw_parts_mut(mem as *mut T, len);
@@ -756,6 +757,25 @@ impl<T> From<T> for Arc<T> {
     }
 }
 
+impl<T, const N: usize> From<[T; N]> for Arc<[T]> {
+    #[inline]
+    fn from(array: [T; N]) -> Self {
+        // for some reason, it's not possible to use `Arc::new` here, so it's inlined manually
+
+        let ptr = Box::into_raw(Box::new(ArcInner {
+            count: atomic::AtomicUsize::new(1),
+            data: array,
+        }));
+
+        unsafe {
+            Arc {
+                p: NonNull::new_unchecked(ptr),
+                phantom: PhantomData,
+            }
+        }
+    }
+}
+
 impl<A> FromIterator<A> for Arc<[A]> {
     fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
         UniqueArc::from_iter(iter).shareable()
@@ -868,6 +888,12 @@ mod tests {
         assert_eq!(Arc::try_unwrap(y), Ok(100));
     }
 
+    #[test]
+    fn slice_from_array() {
+        let x: Arc<[i32]> = Arc::from([1, 2, 3]);
+        assert_eq!(&*x, &[1, 2, 3]);
+    }   
+    
     #[test]
     #[cfg(feature = "unsize")]
     fn coerce_to_slice() {

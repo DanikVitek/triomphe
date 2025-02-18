@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::iter::{ExactSizeIterator, Iterator};
 use core::marker::PhantomData;
-use core::mem::{self, ManuallyDrop};
+use core::mem::ManuallyDrop;
 use core::ptr::{self, addr_of_mut};
 
 use super::{Arc, ArcInner};
@@ -29,7 +29,7 @@ impl<H, T> Arc<HeaderSlice<H, [T]>> {
     where
         I: Iterator<Item = T> + ExactSizeIterator,
     {
-        assert_ne!(mem::size_of::<T>(), 0, "Need to think about ZST");
+        assert_ne!(size_of::<T>(), 0, "Need to think about ZST");
 
         let num_items = items.len();
 
@@ -70,7 +70,7 @@ impl<H, T> Arc<HeaderSlice<H, [T]>> {
     where
         T: Copy,
     {
-        assert_ne!(mem::size_of::<T>(), 0, "Need to think about ZST");
+        assert_ne!(size_of::<T>(), 0, "Need to think about ZST");
 
         let num_items = items.len();
 
